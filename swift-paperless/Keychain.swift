@@ -14,7 +14,7 @@ enum Keychain {
         case invalidItemFormat
         case unexpectedStatus(OSStatus)
     }
-
+    
     static func save(service: String, account: String, value: Data) throws {
         let query: [String: Any] = [
             kSecValueData as String: value,
@@ -22,37 +22,37 @@ enum Keychain {
             kSecAttrAccount as String: account,
             kSecAttrService as String: service,
         ]
-
+        
         let status = SecItemAdd(query as CFDictionary, nil)
-
+        
         if status == errSecDuplicateItem {
             throw KeychainError.duplicateItem
         }
-
+        
         guard status == errSecSuccess else {
             throw KeychainError.unexpectedStatus(status)
         }
     }
-
+    
     static func update(service: String, account: String, value: Data) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-
+        
         let update = [kSecValueData: value] as CFDictionary
         let status = SecItemUpdate(query as CFDictionary, update)
-
+        
         guard status != errSecItemNotFound else {
             throw KeychainError.itemNotFound
         }
-
+        
         guard status == errSecSuccess else {
             throw KeychainError.unexpectedStatus(status)
         }
     }
-
+    
     static func saveOrUpdate(service: String, account: String, value: Data) throws {
         do {
             try save(service: service, account: account,
@@ -62,45 +62,45 @@ enum Keychain {
                        value: value)
         }
     }
-
+    
     static func read(service: String, account: String) throws -> Data {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: account,
             kSecAttrService as String: service,
             kSecReturnData as String: true,
-//            kSecMatchLimit as String: kSecMatchLimitOne,
+            //            kSecMatchLimit as String: kSecMatchLimitOne,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
-
+        
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary,
                                          &result)
-
+        
         guard status != errSecItemNotFound else {
             throw KeychainError.itemNotFound
         }
-
+        
         guard status == errSecSuccess else {
             throw KeychainError.unexpectedStatus(status)
         }
-
+        
         guard let data = result as? Data else {
             throw KeychainError.invalidItemFormat
         }
-
+        
         return data
     }
-
+    
     static func delete(service: String, account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-
+        
         let status = SecItemDelete(query as CFDictionary)
-
+        
         guard status == errSecSuccess else {
             throw KeychainError.unexpectedStatus(status)
         }
@@ -121,24 +121,31 @@ enum Keychain {
         }
     }
     
-    static func readAllIdenties() {
+    static func readAllIdenties() -> [(SecIdentity, String)] {
         let query: [String: Any] = [
             kSecClass as String: kSecClassIdentity,
             kSecMatchLimit as String: kSecMatchLimitAll,
             kSecReturnAttributes as String: true,
-            kSecReturnData as String: true,
+            kSecReturnRef as String: kCFBooleanTrue
         ]
         var item_ref: CFTypeRef?
         
+        var ret: [(SecIdentity, String)] = []
         
         if SecItemCopyMatching(query as CFDictionary, &item_ref) == noErr {
             let items = item_ref as! Array<Dictionary<String, Any>>
             for item in items {
-                print(item[kSecAttrLabel as String] as? String)
+                let name = item[kSecAttrLabel as String] as? String
+                let identity = item[kSecValueRef as String] as! SecIdentity?
+                
+                ret.append((identity!, name!))
+                
             }
         } else {
             print("Something went wrong trying to find the idenities in the keychain")
         }
+        
+        return ret
     }
     
     static func readIdentity(name: String) -> SecIdentity? {
@@ -151,22 +158,34 @@ enum Keychain {
         ]
         var item_ref: CFTypeRef?
         
-        
         if SecItemCopyMatching(query as CFDictionary, &item_ref) == noErr {
             
             if let existingItem = item_ref as? [String: Any],
                let name = existingItem[kSecAttrLabel as String] as? String
-            
+                
             {
                 print(name)
                 
                 let identity = existingItem[kSecValueRef as String] as! SecIdentity?
                 return identity
             }
-             print("Key err")
+            print("Key err")
         } else {
             print("Something went wrong trying to find the user in the keychain")
         }
         return nil
+    }
+    
+    static func deleteIdentity(name: String){
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassIdentity,
+            kSecAttrLabel as String: name,
+        ]
+        
+        if SecItemDelete(query as CFDictionary) == noErr {
+            print("Successfully deleted")
+        }else {
+            print("Error deleting")
+        }
     }
 }
